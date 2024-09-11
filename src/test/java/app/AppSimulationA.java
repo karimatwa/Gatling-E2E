@@ -10,6 +10,7 @@ public class AppSimulationA extends Simulation {
 
   private static final int vu = Integer.getInteger("vu", 1);
 
+  
   private static final HttpProtocolBuilder httpProtocol =
       http.baseUrl("https://api-ecomm.gatling.io")
           .acceptHeader("application/json")
