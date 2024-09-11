@@ -10,6 +10,7 @@ import io.gatling.javaapi.core.*;
 import io.gatling.javaapi.http.*;
 
 public class AppSimulationB extends Simulation {
+  
 
   private static final HttpProtocolBuilder httpProtocolWithAuthentication =
       withAuthenticationHeader(
