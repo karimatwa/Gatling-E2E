@@ -2,7 +2,7 @@ name: Run Gatling Enterprise Simulation Build and Run
 
 # Execute the workflow on each push to the main branch
 on:
- pull_request:
+  pull_request:
     branches:
       - main
 
@@ -21,7 +21,7 @@ env:
   GATLING_ENTERPRISE_API_TOKEN: ${{ secrets.GATLING_ENTERPRISE_API_TOKEN }}
   TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
   WORKSPACE_ID: ${{ vars.WORKSPACE_ID_AWS }}
-  
+
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -40,15 +40,16 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
           cache: 'maven'
+
       # Install jq for JSON parsing
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
-        
+
       # Trigger Terraform HCP run
       - name: Trigger Terraform HCP Run
         run: |
-          curl \
-            --header "Authorization: Bearer ${{ env.TF_API_TOKEN }}" \
+          response=$(curl \
+            --header "Authorization: Bearer $TF_API_TOKEN" \
             --header "Content-Type: application/vnd.api+json" \
             --request POST \
             --data '{
@@ -61,13 +62,13 @@ jobs:
                   "workspace": {
                     "data": {
                       "type": "workspaces",
-                      "id": "${{ env.WORKSPACE_ID }}"
+                      "id": "'$WORKSPACE_ID'"
                     }
                   }
                 }
               }
             }' \
-            https://app.terraform.io/api/v2/runs
+            https://app.terraform.io/api/v2/runs)
 
           echo "response=$response" >> $GITHUB_ENV
           run_id=$(echo $response | jq -r '.data.id')
@@ -90,10 +91,10 @@ jobs:
 
             # Fetch the run status
             response=$(curl \
-              --header "Authorization: Bearer ${{ env.TF_API_TOKEN }}" \
+              --header "Authorization: Bearer $TF_API_TOKEN" \
               --header "Content-Type: application/vnd.api+json" \
               --request GET \
-              https://app.terraform.io/api/v2/runs/${{ env.RUN_ID }})
+              https://app.terraform.io/api/v2/runs/$RUN_ID)
 
             status=$(echo $response | jq -r '.data.attributes.status')
 
@@ -106,8 +107,8 @@ jobs:
             echo "Waiting for Terraform run to complete..."
             sleep 30
           done
-            
-      # Build, package, and upload your Gatling project 
+
+      # Build, package, and upload your Gatling project
       - name: Build Gatling simulation
         run: mvn gatling:enterpriseUpload -Dgatling.enterprise.simulationId=${{ env.SIMULATION_ID }}
 
