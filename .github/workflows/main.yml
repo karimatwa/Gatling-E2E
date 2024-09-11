@@ -1,0 +1,102 @@
+name: Run Gatling Enterprise Simulation Build and Run
+
+# Execute the workflow on each push to the main branch
+on:
+ pull_request:
+    branches:
+      - main
+
+# Here we use concurrency to cancel previous executions if they are still
+# ongoing. Useful to avoid running the same simulation several times
+# simultaneously if we push several code changes in a short time.
+# See https://docs.github.com/actions/using-jobs/using-concurrency.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# The GATLING_ENTERPRISE_API_TOKEN environment variable is recognized by both
+# the Gatling Gradle plugin and the gatling/enterprise-action Action
+env:
+  SIMULATION_ID: ${{ vars.TARGET_SIMULATION_ID }}
+  GATLING_ENTERPRISE_API_TOKEN: ${{ secrets.GATLING_ENTERPRISE_API_TOKEN }}
+  TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+  WORKSPACE_ID: ${{ vars.WORKSPACE_ID }}
+  
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      # Check out your GitHub repository.
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      # Set up Java and the build tools (including Gradle).
+      # You can configure other versions of the JDK, as long as they are
+      # supported by your version of Gatling and by your build tool.
+      # See https://github.com/actions/setup-java/blob/main/README.md for options.
+      - name: Setup JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+          cache: 'maven'
+          
+      # Trigger Terraform HCP run
+      - name: Trigger Terraform HCP Run
+        run: |
+          curl \
+            --header "Authorization: Bearer ${{ env.TF_API_TOKEN }}" \
+            --header "Content-Type: application/vnd.api+json" \
+            --request POST \
+            --data '{
+              "data": {
+                "attributes": {
+                  "message": "Triggered via API"
+                },
+                "type":"runs",
+                "relationships": {
+                  "workspace": {
+                    "data": {
+                      "type": "workspaces",
+                      "id": "${{ env.WORKSPACE_ID }}"
+                    }
+                  }
+                }
+              }
+            }' \
+            https://app.terraform.io/api/v2/runs
+
+          echo "response=$response" >> $GITHUB_ENV
+          run_id=$(echo $response | jq -r '.data.id')
+          echo "RUN_ID=$run_id" >> $GITHUB_ENV
+
+      # Poll for run completion
+      - name: Wait for Terraform HCP Run Completion
+        run: |
+          while true; do
+            status=$(curl \
+              --header "Authorization: Bearer ${{ env.TF_API_TOKEN }}" \
+              --header "Content-Type: application/vnd.api+json" \
+              --request GET \
+              https://app.terraform.io/api/v2/runs/${{ env.RUN_ID }} \
+              | jq -r '.data.attributes.status')
+
+            echo "Terraform run status: $status"
+
+            if [[ "$status" == "applied" || "$status" == "errored" || "$status" == "canceled" ]]; then
+              break
+            fi
+
+            echo "Waiting for Terraform run to complete..."
+            sleep 30 # Wait for 30 seconds before checking again
+          done
+            
+      # Build, package, and upload your Gatling project 
+      - name: Build Gatling simulation
+        run: mvn gatling:enterpriseUpload -Dgatling.enterprise.simulationId=${{ env.SIMULATION_ID }}
+
+      # Run the simulation on Gatling Enterprise
+      - name: Gatling Enterprise Action
+        uses: gatling/enterprise-action@v1
+        with:
+          simulation_id: ${{ env.SIMULATION_ID }}
