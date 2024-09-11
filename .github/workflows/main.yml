@@ -19,15 +19,6 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Setup JDK
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'zulu'
-          java-version: '17'
-          cache: 'maven'
 
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
@@ -95,7 +86,17 @@ jobs:
             echo "Waiting for Terraform run to complete..."
             sleep 30
           done
-
+          
+      - name: Checkout
+        uses: actions/checkout@v3
+        
+      - name: Setup JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+          cache: 'maven'
+          
       - name: Build Gatling simulation
         run: mvn gatling:enterpriseUpload -Dgatling.enterprise.simulationId=${{ env.SIMULATION_ID }}
 
