@@ -10,11 +10,12 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SIMULATION_ID: ${{ vars.TARGET_SIMULATION_ID }}
+  GATLING_ENTERPRISE_SIMULATION_ID: ${{ vars.GATLING_ENTERPTISE_SIMULATION_ID }}
+  GATLING_ENTERPRISE_PACKAGE_ID: ${{ vars.GATLING_ENTERPRISE_PACKAGE_ID }}
   GATLING_ENTERPRISE_API_TOKEN: ${{ secrets.GATLING_ENTERPRISE_API_TOKEN }}
   TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
   WORKSPACE_ID: ${{ vars.WORKSPACE_ID_AWS }}
-
+  
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -87,6 +88,8 @@ jobs:
             sleep 30
           done
           
+          sleep 90
+          
       - name: Checkout
         uses: actions/checkout@v3
         
@@ -98,9 +101,9 @@ jobs:
           cache: 'maven'
           
       - name: Build Gatling simulation
-        run: mvn gatling:enterpriseUpload -Dgatling.enterprise.simulationId=${{ env.SIMULATION_ID }}
+        run: mvn gatling:enterpriseUpload -Dgatling.enterprise.packageId=${{ env.GATLING_ENTERPRISE_PACKAGE_ID }} 
 
       - name: Gatling Enterprise Action
         uses: gatling/enterprise-action@v1
         with:
-          simulation_id: ${{ env.SIMULATION_ID }}
+          simulation_id: ${{ env.GATLING_ENTERPRISE_SIMULATION_ID }}
