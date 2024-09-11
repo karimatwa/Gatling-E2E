@@ -1,21 +1,14 @@
 name: Run Gatling Enterprise Simulation Build and Run
 
-# Execute the workflow on each push to the main branch
 on:
   pull_request:
     branches:
       - main
 
-# Here we use concurrency to cancel previous executions if they are still
-# ongoing. Useful to avoid running the same simulation several times
-# simultaneously if we push several code changes in a short time.
-# See https://docs.github.com/actions/using-jobs/using-concurrency.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# The GATLING_ENTERPRISE_API_TOKEN environment variable is recognized by both
-# the Gatling Gradle plugin and the gatling/enterprise-action Action
 env:
   SIMULATION_ID: ${{ vars.TARGET_SIMULATION_ID }}
   GATLING_ENTERPRISE_API_TOKEN: ${{ secrets.GATLING_ENTERPRISE_API_TOKEN }}
@@ -26,14 +19,9 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      # Check out your GitHub repository.
       - name: Checkout
         uses: actions/checkout@v3
 
-      # Set up Java and the build tools (including Gradle).
-      # You can configure other versions of the JDK, as long as they are
-      # supported by your version of Gatling and by your build tool.
-      # See https://github.com/actions/setup-java/blob/main/README.md for options.
       - name: Setup JDK
         uses: actions/setup-java@v3
         with:
@@ -41,12 +29,11 @@ jobs:
           java-version: '17'
           cache: 'maven'
 
-      # Install jq for JSON parsing
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      # Trigger Terraform HCP run
-      - name: Trigger Terraform HCP Run
+      # Trigger Terraform HCP run with auto-approve
+      - name: Trigger Terraform HCP Run with Auto-Approve
         run: |
           response=$(curl \
             --header "Authorization: Bearer $TF_API_TOKEN" \
@@ -55,7 +42,9 @@ jobs:
             --data '{
               "data": {
                 "attributes": {
-                  "message": "Triggered via API"
+                  "message": "Triggered via API",
+                  "is-destroy": false,
+                  "is-confirmable": false
                 },
                 "type":"runs",
                 "relationships": {
@@ -78,7 +67,7 @@ jobs:
       - name: Wait for Terraform HCP Run Completion
         run: |
           start_time=$(date +%s)
-          timeout=240 # 4 minutes in seconds
+          timeout=240
 
           while true; do
             current_time=$(date +%s)
@@ -89,7 +78,6 @@ jobs:
               exit 1
             fi
 
-            # Fetch the run status
             response=$(curl \
               --header "Authorization: Bearer $TF_API_TOKEN" \
               --header "Content-Type: application/vnd.api+json" \
@@ -108,11 +96,9 @@ jobs:
             sleep 30
           done
 
-      # Build, package, and upload your Gatling project
       - name: Build Gatling simulation
         run: mvn gatling:enterpriseUpload -Dgatling.enterprise.simulationId=${{ env.SIMULATION_ID }}
 
-      # Run the simulation on Gatling Enterprise
       - name: Gatling Enterprise Action
         uses: gatling/enterprise-action@v1
         with:
