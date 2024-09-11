@@ -40,7 +40,10 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
           cache: 'maven'
-          
+      # Install jq for JSON parsing
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+        
       # Trigger Terraform HCP run
       - name: Trigger Terraform HCP Run
         run: |
@@ -73,6 +76,8 @@ jobs:
       # Poll for run completion
       - name: Wait for Terraform HCP Run Completion
         run: |
+          start_time=$(date +%s)
+          timeout=180
           while true; do
             status=$(curl \
               --header "Authorization: Bearer ${{ env.TF_API_TOKEN }}" \
