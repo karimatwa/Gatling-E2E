@@ -90,7 +90,7 @@ jobs:
 
             # Fetch the run status
             response=$(curl \
-              --header "Authorization: Bearer ${{ secrets.TF_API_TOKEN }}" \
+              --header "Authorization: Bearer ${{ env.TF_API_TOKEN }}" \
               --header "Content-Type: application/vnd.api+json" \
               --request GET \
               https://app.terraform.io/api/v2/runs/${{ env.RUN_ID }})
