@@ -81,7 +81,15 @@ jobs:
           cache: 'maven'
 
       - name: Build and upload Gatling package
-        run: mvn gatling:enterpriseDeploy -Dgatling.enterprise.apiToken=${{ env.GATLING_ENTERPRISE_API_TOKEN }}
+        run: |
+          mvn gatling:enterpriseDeploy -Dgatling.enterprise.apiToken=${{ env.GATLING_ENTERPRISE_API_TOKEN }} > build.log 2>&1
+          package_id=$(grep "Package uploaded" build.log | sed -n "s/.*id='\(.*\)'.*/\1/p")
+          simulation_id=$(grep "Simulation" build.log | sed -n "s/.*id='\(.*\)'.*/\1/p")
+  
+          echo "Package ID: $package_id"
+          echo "Simulation ID: $simulation_id"
+          echo "PACKAGE_ID=$package_id" >> $GITHUB_ENV
+          echo "SIMULATION_ID=$simulation_id" >> $GITHUB_ENV
 
       # - name: Trigger Gatling Enterprise Action
       #   uses: gatling/enterprise-action@v1
