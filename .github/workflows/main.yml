@@ -1,0 +1,172 @@
+name: Run Gatling Enterprise Simulation Build and Run
+
+on:
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GATLING_ENTERPRISE_SIMULATION_ID: ${{ vars.GATLING_ENTERPTISE_SIMULATION_ID }}
+  GATLING_ENTERPRISE_PACKAGE_ID: ${{ vars.GATLING_ENTERPRISE_PACKAGE_ID }}
+  GATLING_ENTERPRISE_API_TOKEN: ${{ secrets.GATLING_ENTERPRISE_API_TOKEN }}
+  TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+  WORKSPACE_ID: ${{ vars.WORKSPACE_ID_AWS }}
+  
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Apply Private Locations & Packages - Terraform HCP
+        run: |
+          response=$(curl \
+            --header "Authorization: Bearer $TF_API_TOKEN" \
+            --header "Content-Type: application/vnd.api+json" \
+            --request POST \
+            --data '{
+              "data": {
+                "attributes": {
+                  "message": "Triggered via API",
+                  "is-destroy": false,
+                  "is-confirmable": false
+                },
+                "type":"runs",
+                "relationships": {
+                  "workspace": {
+                    "data": {
+                      "type": "workspaces",
+                      "id": "'$WORKSPACE_ID'"
+                    }
+                  }
+                }
+              }
+            }' \
+            https://app.terraform.io/api/v2/runs)
+
+          echo "response=$response" >> $GITHUB_ENV
+          run_id=$(echo $response | jq -r '.data.id')
+          echo "RUN_ID=$run_id" >> $GITHUB_ENV
+
+      - name: Wait for Terraform HCP Run Completion
+        run: |
+          start_time=$(date +%s)
+          timeout=240
+
+          while true; do
+            current_time=$(date +%s)
+            elapsed_time=$((current_time - start_time))
+
+            if [ $elapsed_time -gt $timeout ]; then
+              echo "Error: Terraform run exceeded maximum polling duration of 4 minutes."
+              exit 1
+            fi
+
+            response=$(curl \
+              --header "Authorization: Bearer $TF_API_TOKEN" \
+              --header "Content-Type: application/vnd.api+json" \
+              --request GET \
+              https://app.terraform.io/api/v2/runs/$RUN_ID)
+
+            status=$(echo $response | jq -r '.data.attributes.status')
+
+            echo "Terraform run status: $status"
+
+            if [[ "$status" == "applied" || "$status" == "planned_and_finished" || "$status" == "errored" || "$status" == "canceled" ]]; then
+              break
+            fi
+
+            echo "Waiting for Terraform run to complete..."
+            sleep 15
+          done
+          
+      - name: Control Plane Bootup
+        run: sleep 60
+          
+      - name: Checkout
+        uses: actions/checkout@v3
+        
+      - name: Setup JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+          cache: 'maven'
+          
+      - name: Build and upload Gatling package
+        run: mvn gatling:enterpriseUpload -Dgatling.enterprise.packageId=${{ env.GATLING_ENTERPRISE_PACKAGE_ID }} 
+
+      - name: Trigger Gatling Enterprise Action
+        uses: gatling/enterprise-action@v1
+        with:
+          simulation_id: ${{ env.GATLING_ENTERPRISE_SIMULATION_ID }}
+
+      # Trigger Terraform destroy run after the Gatling simulation is done
+      - name: Destroy Private Locations & Packages - Terraform HCP
+        run: |
+          destroy_response=$(curl \
+            --header "Authorization: Bearer $TF_API_TOKEN" \
+            --header "Content-Type: application/vnd.api+json" \
+            --request POST \
+            --data '{
+              "data": {
+                "attributes": {
+                  "message": "Destroy run triggered via API",
+                  "is-destroy": true,
+                  "is-confirmable": false
+                },
+                "type":"runs",
+                "relationships": {
+                  "workspace": {
+                    "data": {
+                      "type": "workspaces",
+                      "id": "'$WORKSPACE_ID'"
+                    }
+                  }
+                }
+              }
+            }' \
+            https://app.terraform.io/api/v2/runs)
+
+          echo "destroy_response=$destroy_response" >> $GITHUB_ENV
+          destroy_run_id=$(echo $destroy_response | jq -r '.data.id')
+          echo "DESTROY_RUN_ID=$destroy_run_id" >> $GITHUB_ENV
+
+      # Poll for destroy run completion
+      - name: Wait for Terraform HCP Destroy Run Completion
+        run: |
+          start_time=$(date +%s)
+          timeout=240
+
+          while true; do
+            current_time=$(date +%s)
+            elapsed_time=$((current_time - start_time))
+
+            if [ $elapsed_time -gt $timeout ]; then
+              echo "Error: Terraform destroy run exceeded maximum polling duration of 4 minutes."
+              exit 1
+            fi
+
+            destroy_response=$(curl \
+              --header "Authorization: Bearer $TF_API_TOKEN" \
+              --header "Content-Type: application/vnd.api+json" \
+              --request GET \
+              https://app.terraform.io/api/v2/runs/$DESTROY_RUN_ID)
+
+            destroy_status=$(echo $destroy_response | jq -r '.data.attributes.status')
+
+            echo "Terraform destroy run status: $destroy_status"
+
+            if [[ "$destroy_status" == "applied" || "$destroy_status" == "errored" || "$destroy_status" == "canceled" ]]; then
+              break
+            fi
+
+            echo "Waiting for Terraform destroy run to complete..."
+            sleep 15
+          done
