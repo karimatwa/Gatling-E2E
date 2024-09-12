@@ -12,6 +12,7 @@ import java.util.List;
 
 public class AppSimulationB extends Simulation {
 
+  
   private static final HttpProtocolBuilder httpProtocolWithAuthentication =
       withAuthenticationHeader(
           http.baseUrl(baseUrl)
