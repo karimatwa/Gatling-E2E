@@ -115,15 +115,19 @@ public class AppSimulationB extends Simulation {
 
   private static final List<Assertion> getAssertion(String type) {
     return switch (type) {
-      case "capacity" -> List.of(global().responseTime().percentile(90.0).lt(500));
-      case "soak" -> List.of(global().responseTime().percentile(90.0).lt(500));
+      case "capacity" -> List.of(global().responseTime().percentile(90.0).lt(500),
+      global().failedRequests().percent().lt(5.0));
+      case "soak" -> List.of(global().responseTime().percentile(90.0).lt(500),
+      global().failedRequests().percent().lt(5.0));
       case "stress" ->
           List.of(
               global().responseTime().percentile(90.0).lt(500),
               global().failedRequests().percent().lt(5.0));
-      case "breakpoint" -> List.of(global().responseTime().percentile(90.0).lt(500));
+      case "breakpoint" -> List.of(global().responseTime().percentile(90.0).lt(500),
+      global().failedRequests().percent().lt(5.0));
       case "smoke" -> List.of(global().failedRequests().count().lt(1L));
-      default -> List.of(global().responseTime().percentile(90.0).lt(500));
+      default -> List.of(global().responseTime().percentile(90.0).lt(500),
+      global().failedRequests().percent().lt(5.0));
     };
   }
 
