@@ -5,6 +5,7 @@ import static io.gatling.javaapi.http.HttpDsl.*;
 import io.gatling.javaapi.core.*;
 import io.gatling.javaapi.http.*;
 
+
 public class AppSimulationA extends Simulation {
 
   private static final int vu = Integer.getInteger("vu", 1);
